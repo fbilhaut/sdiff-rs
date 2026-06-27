@@ -137,6 +137,8 @@ pub enum ArrayDiffStrategy {
     Positional,
     /// Use Longest Common Subsequence algorithm to detect insertions and deletions
     Lcs,
+    /// Treat arrays as unordered sets: two arrays with the same elements in any order are equal
+    Set,
 }
 
 /// Configuration for the diff algorithm.
@@ -301,6 +303,9 @@ fn diff_arrays(
         ArrayDiffStrategy::Lcs => {
             diff_arrays_lcs(old_arr, new_arr, path, changes, config);
         }
+        ArrayDiffStrategy::Set => {
+            diff_arrays_set(old_arr, new_arr, path, changes, config);
+        }
     }
 }
 
@@ -433,6 +438,89 @@ fn diff_arrays_lcs(
                 });
                 new_idx = new_i + 1;
             }
+        }
+    }
+}
+
+/// Like `nodes_equal` but applies set semantics recursively to nested arrays when the
+/// strategy is `Set`. Used for element matching inside `diff_arrays_set`.
+fn nodes_match_set(old: &Node, new: &Node, config: &DiffConfig) -> bool {
+    if config.ignore_whitespace {
+        if let (Node::String(s1), Node::String(s2)) = (old, new) {
+            return normalize_whitespace(s1) == normalize_whitespace(s2);
+        }
+    }
+    match (old, new) {
+        (Node::Array(a), Node::Array(b)) => {
+            if a.len() != b.len() {
+                return false;
+            }
+            let mut matched = vec![false; b.len()];
+            'outer: for item_a in a {
+                for (j, item_b) in b.iter().enumerate() {
+                    if !matched[j] && nodes_match_set(item_a, item_b, config) {
+                        matched[j] = true;
+                        continue 'outer;
+                    }
+                }
+                return false;
+            }
+            true
+        }
+        (Node::Object(a), Node::Object(b)) => {
+            if a.len() != b.len() {
+                return false;
+            }
+            a.iter()
+                .all(|(key, val)| b.get(key).is_some_and(|v| nodes_match_set(val, v, config)))
+        }
+        _ => old.semantic_equals(new),
+    }
+}
+
+fn diff_arrays_set(
+    old_arr: &[Node],
+    new_arr: &[Node],
+    path: Vec<String>,
+    changes: &mut Vec<Change>,
+    config: &DiffConfig,
+) {
+    let mut matched_new = vec![false; new_arr.len()];
+
+    for (old_idx, old_elem) in old_arr.iter().enumerate() {
+        let mut found = false;
+        for (new_idx, new_elem) in new_arr.iter().enumerate() {
+            if !matched_new[new_idx] && nodes_match_set(old_elem, new_elem, config) {
+                matched_new[new_idx] = true;
+                let mut new_path = path.clone();
+                new_path.push(format!("[{}]", old_idx));
+                diff_nodes(old_elem, new_elem, new_path, changes, config);
+                found = true;
+                break;
+            }
+        }
+        if !found {
+            let mut new_path = path.clone();
+            new_path.push(format!("[{}]", old_idx));
+            changes.push(Change {
+                path: new_path,
+                change_type: ChangeType::Removed,
+                old_value: Some(old_elem.clone()),
+                new_value: None,
+            });
+        }
+    }
+
+    for (new_idx, matched) in matched_new.iter().enumerate() {
+        if !matched {
+            let mut new_path = path.clone();
+            new_path.push(format!("[{}]", new_idx));
+            changes.push(Change {
+                path: new_path,
+                change_type: ChangeType::Added,
+                old_value: None,
+                new_value: Some(new_arr[new_idx].clone()),
+            });
         }
     }
 }

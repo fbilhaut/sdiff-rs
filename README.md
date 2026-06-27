@@ -48,6 +48,7 @@ sdiff-rs old.json new.json --only "spec.**"                # Show only spec chan
 # Array comparison strategies
 sdiff-rs old.json new.json --array-strategy=positional  # Compare by index (default)
 sdiff-rs old.json new.json --array-strategy=lcs         # Detect insertions/deletions
+sdiff-rs old.json new.json --array-strategy=set         # Ignore element ordering
 ```
 
 Run `sdiff-rs --help` for all options.
@@ -57,6 +58,8 @@ Run `sdiff-rs --help` for all options.
 **Positional** (default): Compares arrays element-by-element by index. Fast but shows misleading changes when elements are inserted.
 
 **LCS**: Detects true insertions and deletions. Better for arrays where elements may be added or removed in the middle.
+
+**Set**: Treats arrays as unordered sets. Two arrays with the same elements in any order are considered identical. Only elements that appear in one array but not the other are reported as added or removed.
 
 ```bash
 # Example: [1, 2, 3] → [1, 4, 2, 3]
@@ -69,6 +72,10 @@ Summary: 1 added, 2 modified
 $ sdiff-rs old.json new.json --array-strategy=lcs
 + [1]: 4
 Summary: 1 added
+
+# Example: [1, 2, 3] → [3, 1, 2]
+$ sdiff-rs old.json new.json --array-strategy=set
+Summary: no changes
 ```
 
 ### Path Filtering
@@ -155,6 +162,18 @@ use sdiff_rs::{compute_diff, DiffConfig, ArrayDiffStrategy};
 
 let config = DiffConfig {
     array_diff_strategy: ArrayDiffStrategy::Lcs,
+    ..Default::default()
+};
+let diff = compute_diff(&old, &new, &config);
+```
+
+### Set array diffing
+
+```rust
+use sdiff_rs::{compute_diff, DiffConfig, ArrayDiffStrategy};
+
+let config = DiffConfig {
+    array_diff_strategy: ArrayDiffStrategy::Set,
     ..Default::default()
 };
 let diff = compute_diff(&old, &new, &config);

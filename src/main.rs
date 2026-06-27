@@ -151,6 +151,8 @@ enum ArrayStrategyArg {
     Positional,
     /// Use LCS algorithm to detect insertions and deletions
     Lcs,
+    /// Treat arrays as unordered sets: same elements in any order are considered equal
+    Set,
 }
 
 impl From<ArrayStrategyArg> for ArrayDiffStrategy {
@@ -158,6 +160,7 @@ impl From<ArrayStrategyArg> for ArrayDiffStrategy {
         match arg {
             ArrayStrategyArg::Positional => ArrayDiffStrategy::Positional,
             ArrayStrategyArg::Lcs => ArrayDiffStrategy::Lcs,
+            ArrayStrategyArg::Set => ArrayDiffStrategy::Set,
         }
     }
 }

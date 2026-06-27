@@ -477,3 +477,126 @@ fn test_lcs_vs_positional_comparison() {
     assert_eq!(lcs_diff.stats.added, 1);
     assert_eq!(lcs_diff.stats.removed, 0);
 }
+
+fn set_config() -> DiffConfig {
+    DiffConfig {
+        array_diff_strategy: ArrayDiffStrategy::Set,
+        ..Default::default()
+    }
+}
+
+#[test]
+fn test_set_same_order_no_diff() {
+    let old = Node::Array(vec![
+        Node::Number(1.0),
+        Node::Number(2.0),
+        Node::Number(3.0),
+    ]);
+    let new = Node::Array(vec![
+        Node::Number(1.0),
+        Node::Number(2.0),
+        Node::Number(3.0),
+    ]);
+    let diff = compute_diff(&old, &new, &set_config());
+    assert!(diff.is_empty());
+}
+
+#[test]
+fn test_set_reordered_no_diff() {
+    let old = Node::Array(vec![
+        Node::Number(1.0),
+        Node::Number(2.0),
+        Node::Number(3.0),
+    ]);
+    let new = Node::Array(vec![
+        Node::Number(3.0),
+        Node::Number(1.0),
+        Node::Number(2.0),
+    ]);
+    let diff = compute_diff(&old, &new, &set_config());
+    assert!(diff.is_empty());
+}
+
+#[test]
+fn test_set_added_element() {
+    let old = Node::Array(vec![Node::Number(1.0), Node::Number(2.0)]);
+    let new = Node::Array(vec![
+        Node::Number(1.0),
+        Node::Number(2.0),
+        Node::Number(3.0),
+    ]);
+    let diff = compute_diff(&old, &new, &set_config());
+    assert_eq!(diff.stats.added, 1);
+    assert_eq!(diff.stats.removed, 0);
+    assert_eq!(diff.stats.modified, 0);
+}
+
+#[test]
+fn test_set_removed_element() {
+    let old = Node::Array(vec![
+        Node::Number(1.0),
+        Node::Number(2.0),
+        Node::Number(3.0),
+    ]);
+    let new = Node::Array(vec![Node::Number(1.0), Node::Number(3.0)]);
+    let diff = compute_diff(&old, &new, &set_config());
+    assert_eq!(diff.stats.added, 0);
+    assert_eq!(diff.stats.removed, 1);
+    assert_eq!(diff.stats.modified, 0);
+    assert_eq!(diff.changes[0].change_type, ChangeType::Removed);
+}
+
+#[test]
+fn test_set_objects_reordered_no_diff() {
+    let mut obj_a = HashMap::new();
+    obj_a.insert("id".to_string(), Node::Number(1.0));
+    obj_a.insert("name".to_string(), Node::String("alice".to_string()));
+
+    let mut obj_b = HashMap::new();
+    obj_b.insert("id".to_string(), Node::Number(2.0));
+    obj_b.insert("name".to_string(), Node::String("bob".to_string()));
+
+    let old = Node::Array(vec![Node::Object(obj_a.clone()), Node::Object(obj_b.clone())]);
+    let new = Node::Array(vec![Node::Object(obj_b), Node::Object(obj_a)]);
+
+    let diff = compute_diff(&old, &new, &set_config());
+    assert!(diff.is_empty());
+}
+
+#[test]
+fn test_set_objects_one_modified() {
+    let mut obj_a = HashMap::new();
+    obj_a.insert("id".to_string(), Node::Number(1.0));
+
+    let mut obj_b = HashMap::new();
+    obj_b.insert("id".to_string(), Node::Number(2.0));
+
+    let mut obj_c = HashMap::new();
+    obj_c.insert("id".to_string(), Node::Number(3.0));
+
+    let old = Node::Array(vec![Node::Object(obj_a.clone()), Node::Object(obj_b)]);
+    let new = Node::Array(vec![Node::Object(obj_c), Node::Object(obj_a)]);
+
+    let diff = compute_diff(&old, &new, &set_config());
+    assert_eq!(diff.stats.added, 1);
+    assert_eq!(diff.stats.removed, 1);
+    assert_eq!(diff.stats.modified, 0);
+}
+
+#[test]
+fn test_set_empty_arrays() {
+    let old = Node::Array(vec![]);
+    let new = Node::Array(vec![]);
+    let diff = compute_diff(&old, &new, &set_config());
+    assert!(diff.is_empty());
+}
+
+#[test]
+fn test_set_duplicates_handled() {
+    // Old has two 1s, new has only one — one should be reported removed
+    let old = Node::Array(vec![Node::Number(1.0), Node::Number(1.0)]);
+    let new = Node::Array(vec![Node::Number(1.0)]);
+    let diff = compute_diff(&old, &new, &set_config());
+    assert_eq!(diff.stats.removed, 1);
+    assert_eq!(diff.stats.added, 0);
+}
