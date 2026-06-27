@@ -66,6 +66,11 @@ struct Cli {
     #[arg(long, value_enum, default_value = "positional")]
     array_strategy: ArrayStrategyArg,
 
+    /// Comma-separated glob patterns for arrays that must use strict (positional) comparison,
+    /// e.g. "**.location,**.ends"
+    #[arg(long = "strict-arrays", value_name = "PATTERNS")]
+    strict_arrays: Option<String>,
+
     /// Ignore paths matching these patterns (can be used multiple times)
     #[arg(long = "ignore", value_name = "PATTERN")]
     ignore_patterns: Vec<String>,
@@ -164,6 +169,7 @@ impl From<ArrayStrategyArg> for ArrayDiffStrategy {
         }
     }
 }
+
 
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
@@ -296,6 +302,10 @@ fn run(cli: Cli) -> Result<i32> {
         ignore_whitespace: cli.ignore_whitespace,
         treat_null_as_missing: cli.null_as_missing,
         array_diff_strategy: cli.array_strategy.into(),
+        strict_arrays: cli
+            .strict_arrays
+            .map(|s| s.split(',').map(|p| p.trim().to_string()).collect())
+            .unwrap_or_default(),
     };
 
     let mut diff = compute_diff(&old, &new, &diff_config);

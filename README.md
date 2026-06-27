@@ -49,6 +49,10 @@ sdiff-rs old.json new.json --only "spec.**"                # Show only spec chan
 sdiff-rs old.json new.json --array-strategy=positional  # Compare by index (default)
 sdiff-rs old.json new.json --array-strategy=lcs         # Detect insertions/deletions
 sdiff-rs old.json new.json --array-strategy=set         # Ignore element ordering
+
+# Force strict (positional) comparison for specific arrays, e.g. ordered [lat, lon] pairs
+sdiff-rs old.json new.json --array-strategy=set --strict-arrays "**.location"
+sdiff-rs old.json new.json --array-strategy=set --strict-arrays "**.location,**.ends"
 ```
 
 Run `sdiff-rs --help` for all options.
@@ -60,6 +64,13 @@ Run `sdiff-rs --help` for all options.
 **LCS**: Detects true insertions and deletions. Better for arrays where elements may be added or removed in the middle.
 
 **Set**: Treats arrays as unordered sets. Two arrays with the same elements in any order are considered identical. Only elements that appear in one array but not the other are reported as added or removed.
+
+**Strict arrays** (`--strict-arrays "PATTERN,PATTERN,..."`): force positional (strict) comparison for specific arrays, regardless of the global strategy. Useful for semantically ordered arrays like `[lat, lon]` coordinates where element order must not be ignored. Patterns use the same glob syntax as `--ignore`/`--only`; multiple patterns are comma-separated.
+
+```bash
+# Global set, but location and ends arrays are always compared strictly
+sdiff-rs old.json new.json --array-strategy=set --strict-arrays "**.location,**.ends"
+```
 
 ```bash
 # Example: [1, 2, 3] → [1, 4, 2, 3]
@@ -174,6 +185,19 @@ use sdiff_rs::{compute_diff, DiffConfig, ArrayDiffStrategy};
 
 let config = DiffConfig {
     array_diff_strategy: ArrayDiffStrategy::Set,
+    ..Default::default()
+};
+let diff = compute_diff(&old, &new, &config);
+```
+
+### Strict arrays
+
+```rust
+use sdiff_rs::{compute_diff, DiffConfig, ArrayDiffStrategy};
+
+let config = DiffConfig {
+    array_diff_strategy: ArrayDiffStrategy::Set,
+    strict_arrays: vec!["**.location".to_string(), "**.ends".to_string()],
     ..Default::default()
 };
 let diff = compute_diff(&old, &new, &config);

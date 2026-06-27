@@ -600,3 +600,89 @@ fn test_set_duplicates_handled() {
     assert_eq!(diff.stats.removed, 1);
     assert_eq!(diff.stats.added, 0);
 }
+
+// ── strict-arrays override ────────────────────────────────────────────────────
+
+fn strict_config(global: ArrayDiffStrategy, patterns: &[&str]) -> DiffConfig {
+    DiffConfig {
+        array_diff_strategy: global,
+        strict_arrays: patterns.iter().map(|p| p.to_string()).collect(),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn test_strict_override_suppresses_set() {
+    // Global: set. Strict: **.location.
+    // Objects with reordered location arrays should flag a diff.
+    let make = |lat: f64, lon: f64| {
+        let mut m = HashMap::new();
+        m.insert(
+            "location".to_string(),
+            Node::Array(vec![Node::Number(lat), Node::Number(lon)]),
+        );
+        Node::Object(m)
+    };
+
+    let old = Node::Array(vec![make(48.0, 2.0)]);
+    let new = Node::Array(vec![make(2.0, 48.0)]); // lat/lon swapped
+
+    // Without strict: set treats [48,2] and [2,48] as equal → no diff
+    assert!(compute_diff(&old, &new, &set_config()).is_empty());
+
+    // With strict on location: order matters → diff detected
+    let diff = compute_diff(&old, &new, &strict_config(ArrayDiffStrategy::Set, &["**.location"]));
+    assert!(!diff.is_empty());
+}
+
+#[test]
+fn test_strict_override_with_lcs_global() {
+    // Global: lcs. Strict: **.location.
+    // Objects with reordered location arrays should flag a diff.
+    let make = |lat: f64, lon: f64| {
+        let mut m = HashMap::new();
+        m.insert(
+            "location".to_string(),
+            Node::Array(vec![Node::Number(lat), Node::Number(lon)]),
+        );
+        Node::Object(m)
+    };
+
+    let old = Node::Array(vec![make(48.0, 2.0)]);
+    let new = Node::Array(vec![make(2.0, 48.0)]);
+
+    // Without strict: lcs already treats arrays positionally → diff
+    let lcs = DiffConfig { array_diff_strategy: ArrayDiffStrategy::Lcs, ..Default::default() };
+    assert!(!compute_diff(&old, &new, &lcs).is_empty());
+
+    // With strict: same result, still a diff
+    let diff = compute_diff(&old, &new, &strict_config(ArrayDiffStrategy::Lcs, &["**.location"]));
+    assert!(!diff.is_empty());
+}
+
+#[test]
+fn test_strict_override_multiple_patterns() {
+    // Two patterns in strict_arrays; both independently force positional.
+    let make = |a: f64, b: f64, key: &str| {
+        let mut m = HashMap::new();
+        m.insert(
+            key.to_string(),
+            Node::Array(vec![Node::Number(a), Node::Number(b)]),
+        );
+        Node::Object(m)
+    };
+
+    let old = Node::Array(vec![make(1.0, 2.0, "coords")]);
+    let new = Node::Array(vec![make(2.0, 1.0, "coords")]); // swapped
+
+    // Without strict: set → no diff
+    assert!(compute_diff(&old, &new, &set_config()).is_empty());
+
+    // With strict on "**.coords" (one of the two patterns): diff detected
+    let diff = compute_diff(
+        &old,
+        &new,
+        &strict_config(ArrayDiffStrategy::Set, &["**.location", "**.coords"]),
+    );
+    assert!(!diff.is_empty());
+}
