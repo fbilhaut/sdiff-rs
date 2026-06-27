@@ -513,6 +513,7 @@ fn diff_arrays_set(
     config: &DiffConfig,
 ) {
     let mut matched_new = vec![false; new_arr.len()];
+    let mut unmatched_old: Vec<usize> = Vec::new();
 
     for (old_idx, old_elem) in old_arr.iter().enumerate() {
         let mut found = false;
@@ -527,28 +528,60 @@ fn diff_arrays_set(
             }
         }
         if !found {
+            unmatched_old.push(old_idx);
+        }
+    }
+
+    // For unmatched elements on both sides, pair each unmatched old with the unmatched new
+    // that has the fewest differences (best-match fallback). This drills down to the actual
+    // changed fields instead of reporting the whole element as removed/added.
+    let mut unmatched_new: Vec<usize> = matched_new
+        .iter()
+        .enumerate()
+        .filter(|(_, &m)| !m)
+        .map(|(i, _)| i)
+        .collect();
+
+    for old_idx in unmatched_old {
+        if unmatched_new.is_empty() {
             let mut new_path = path.clone();
             new_path.push(format!("[{}]", old_idx));
             changes.push(Change {
                 path: new_path,
                 change_type: ChangeType::Removed,
-                old_value: Some(old_elem.clone()),
+                old_value: Some(old_arr[old_idx].clone()),
                 new_value: None,
             });
+            continue;
         }
+
+        // Pick the new element with the fewest changes against this old element
+        let best_j = unmatched_new
+            .iter()
+            .enumerate()
+            .min_by_key(|(_, &new_idx)| {
+                compute_diff(&old_arr[old_idx], &new_arr[new_idx], config)
+                    .stats
+                    .total_changes()
+            })
+            .map(|(j, _)| j)
+            .unwrap();
+
+        let new_idx = unmatched_new.remove(best_j);
+        let mut new_path = path.clone();
+        new_path.push(format!("[{}]", old_idx));
+        diff_nodes(&old_arr[old_idx], &new_arr[new_idx], new_path, changes, config);
     }
 
-    for (new_idx, matched) in matched_new.iter().enumerate() {
-        if !matched {
-            let mut new_path = path.clone();
-            new_path.push(format!("[{}]", new_idx));
-            changes.push(Change {
-                path: new_path,
-                change_type: ChangeType::Added,
-                old_value: None,
-                new_value: Some(new_arr[new_idx].clone()),
-            });
-        }
+    for new_idx in unmatched_new {
+        let mut new_path = path.clone();
+        new_path.push(format!("[{}]", new_idx));
+        changes.push(Change {
+            path: new_path,
+            change_type: ChangeType::Added,
+            old_value: None,
+            new_value: Some(new_arr[new_idx].clone()),
+        });
     }
 }
 

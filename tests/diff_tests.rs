@@ -577,10 +577,11 @@ fn test_set_objects_one_modified() {
     let old = Node::Array(vec![Node::Object(obj_a.clone()), Node::Object(obj_b)]);
     let new = Node::Array(vec![Node::Object(obj_c), Node::Object(obj_a)]);
 
+    // obj_b ({id:2}) and obj_c ({id:3}) are best-matched and diffed recursively
     let diff = compute_diff(&old, &new, &set_config());
-    assert_eq!(diff.stats.added, 1);
-    assert_eq!(diff.stats.removed, 1);
-    assert_eq!(diff.stats.modified, 0);
+    assert_eq!(diff.stats.added, 0);
+    assert_eq!(diff.stats.removed, 0);
+    assert_eq!(diff.stats.modified, 1);
 }
 
 #[test]
